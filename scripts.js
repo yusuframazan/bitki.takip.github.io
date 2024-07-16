@@ -15,13 +15,78 @@ function loadPage(page) {
         case 'history':
             loadDataHistory();
             break;
-        case 'control':
-            loadControlPage();
+        case 'controls':
+            loadControlsPage();
             break;
         default:
             loadHomePage();
     }
 }
+
+function loadControlsPage() {
+    document.getElementById("main-content").innerHTML = `
+        <div class="container">
+            <h2>Kontrol Paneli</h2>
+            <div class="control-panel">
+                <div>
+                    <p>Fan Durumu: <span id="fan-status">Kapalı</span></p>
+                    <button onclick="toggleFan()">Fanı Aç/Kapat</button>
+                </div>
+                <div>
+                    <p>Su Motoru Durumu: <span id="water-pump-status">Kapalı</span></p>
+                    <button onclick="toggleWaterPump()">Su Motorunu Aç/Kapat</button>
+                </div>
+            </div>
+        </div>
+    `;
+    updateControlStatus(); // Firebase'den kontrol durumlarını güncelle
+}
+
+function updateControlStatus() {
+    fetch('https://bitki-izleme-default-rtdb.firebaseio.com/control.json')
+        .then(response => response.json())
+        .then(data => {
+            document.getElementById('fan-status').textContent = data.fan ? 'Açık' : 'Kapalı';
+            document.getElementById('water-pump-status').textContent = data.waterPump ? 'Açık' : 'Kapalı';
+        })
+        .catch(error => console.error('Kontrol durumu alınamadı:', error));
+}
+
+function toggleFan() {
+    const fanStatus = document.getElementById('fan-status').textContent === 'Kapalı';
+    fetch('https://bitki-izleme-default-rtdb.firebaseio.com/control.json', {
+        method: 'PATCH',
+        body: JSON.stringify({ fan: fanStatus }),
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            updateControlStatus();
+        } else {
+            console.error('Fan durumu güncellenemedi.');
+        }
+    })
+    .catch(error => console.error('Fan durumu güncellenemedi:', error));
+}
+
+function toggleWaterPump() {
+    const waterPumpStatus = document.getElementById('water-pump-status').textContent === 'Kapalı';
+    fetch('https://bitki-izleme-default-rtdb.firebaseio.com/control.json', {
+        method: 'PATCH',
+        body: JSON.stringify({ waterPump: waterPumpStatus }),
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            updateControlStatus();
+        } else {
+            console.error('Su motoru durumu güncellenemedi.');
+        }
+    })
+    .catch(error => console.error('Su motoru durumu güncellenemedi:', error));
+}
+
+document.addEventListener('DOMContentLoaded', updateControlStatus);
 
 function loadHomePage() {
     document.getElementById("main-content").innerHTML = `
@@ -36,7 +101,6 @@ function loadHomePage() {
 
         <div class="controls">
             <button onclick="updateSensorData()">Verileri Güncelle</button>
-            <!-- Diğer kontroller burada yer alabilir -->
         </div>
 
         <div class="chart-container">
@@ -96,7 +160,7 @@ function loadContactPage() {
         <ul>
             <li>Telefon: 123-456-7890</li>
             <li>E-posta: Yusuf@bitkiizleme.com</li>
-            <li>Adres: İstiklal Cad. No: 123, Karabük, Türkiye</li>
+            <li>Adres: istiklal Cad. No: 123, Karabük, Türkiye</li>
         </ul>
         
         <div>
@@ -125,168 +189,154 @@ function loadDataHistory() {
     fetch('https://bitki-izleme-default-rtdb.firebaseio.com/sensors.json')
         .then(response => response.json())
         .then(data => {
-            let tableHTML = `
-                <h2>Veri Geçmişi</h2>
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Zaman</th>
-                            <th>Sıcaklık (°C)</th>
-                            <th>Nem (%)</th>
-                            <th>Toprak Nem Sensörü (%)</th>
-                            <th>Işık Şiddeti</th>
-                        </tr>
-                    </thead>
-                    <tbody>`;
-            Object.keys(data).forEach(key => {
-                const sensor = data[key];
-                const time = new Date(sensor.time).toLocaleString();
-                const temperature = sensor.temperature;
-                const humidity = sensor.humidity;
-                const soilMoisture = sensor.soilMoisture;
-                const ldrSensor = sensor.ldrSensor;
-                tableHTML += `
-                    <tr>
-                        <td>${time}</td>
-                        <td>${temperature}</td>
-                        <td>${humidity}</td>
-                        <td>${soilMoisture}</td>
-                        <td>${ldrSensor}</td>
-                    </tr>`;
+            const container = document.createElement('div');
+            container.className = 'container';
+            
+            const table = document.createElement('table');
+            table.className = 'sensor-history-table';
+            
+            const thead = document.createElement('thead');
+            const tr = document.createElement('tr');
+            const headers = ['Zaman', 'Toprak Nemi', 'Sıcaklık', 'Nem', 'Işık Şiddeti'];
+            
+            headers.forEach(headerText => {
+                const th = document.createElement('th');
+                th.textContent = headerText;
+                tr.appendChild(th);
             });
-            tableHTML += `
-                    </tbody>
-                </table>`;
-            document.getElementById('main-content').innerHTML = tableHTML;
+            
+            thead.appendChild(tr);
+            table.appendChild(thead);
+            
+            const tbody = document.createElement('tbody');
+            
+            for (const key in data) {
+                if (data.hasOwnProperty(key)) {
+                    const entry = data[key];
+                    const tr = document.createElement('tr');
+                    
+                    const tdTime = document.createElement('td');
+                    tdTime.textContent = entry.timestamp;
+                    tr.appendChild(tdTime);
+                    
+                    const tdSoilMoisture = document.createElement('td');
+                    tdSoilMoisture.textContent = entry.soilMoisture;
+                    tr.appendChild(tdSoilMoisture);
+                    
+                    const tdTemperature = document.createElement('td');
+                    tdTemperature.textContent = entry.temperature;
+                    tr.appendChild(tdTemperature);
+                    
+                    const tdHumidity = document.createElement('td');
+                    tdHumidity.textContent = entry.humidity;
+                    tr.appendChild(tdHumidity);
+                    
+                    const tdLight = document.createElement('td');
+                    tdLight.textContent = entry.ldr;
+                    tr.appendChild(tdLight);
+                    
+                    tbody.appendChild(tr);
+                }
+            }
+            
+            table.appendChild(tbody);
+            container.appendChild(table);
+            document.getElementById('main-content').innerHTML = '';
+            document.getElementById('main-content').appendChild(container);
         })
-        .catch(error => console.error('Veri alınırken hata oluştu:', error));
-}
-
-function loadControlPage() {
-    document.getElementById("main-content").innerHTML = `
-        <div class="container">
-            <h2>Kontrol Paneli</h2>
-            <div class="control-panel">
-                <div>
-                    <p>Fan Durumu: <span id="fan-status">Kapalı</span></p>
-                    <button onclick="toggleFan()">Fanı Aç/Kapat</button>
-                </div>
-                <div>
-                    <p>Su Motoru Durumu: <span id="water-pump-status">Kapalı</span></p>
-                    <button onclick="toggleWaterPump()">Su Motorunu Aç/Kapat</button>
-                </div>
-            </div>
-        </div>
-    `;
-    getControlStatus();
-}
-
-function getControlStatus() {
-    const dbRef = firebase.database().ref('control');
-    dbRef.on('value', (snapshot) => {
-        const data = snapshot.val();
-        document.getElementById('fan-status').textContent = data.fan ? 'Açık' : 'Kapalı';
-        document.getElementById('water-pump-status').textContent = data.waterPump ? 'Açık' : 'Kapalı';
-    });
-}
-
-function toggleFan() {
-    const fanStatus = document.getElementById('fan-status').textContent === 'Kapalı';
-    firebase.database().ref('control/fan').set(fanStatus);
-}
-
-function toggleWaterPump() {
-    const pumpStatus = document.getElementById('water-pump-status').textContent === 'Kapalı';
-    firebase.database().ref('control/waterPump').set(pumpStatus);
+        .catch(error => console.error('Veri geçmişi alınamadı:', error));
 }
 
 function updateSensorData() {
-    fetch('https://bitki-izleme-default-rtdb.firebaseio.com/sensors.json')
+    fetch('https://bitki-izleme-default-rtdb.firebaseio.com/sensors/latest.json')
         .then(response => response.json())
         .then(data => {
-            const latestData = data[Object.keys(data).pop()];
-            document.getElementById('plant-name').textContent = "Domates";
-            document.getElementById('soil-moisture').textContent = latestData.soilMoisture;
-            document.getElementById('current-temperature').textContent = latestData.temperature;
-            document.getElementById('current-humidity').textContent = latestData.humidity;
-            document.getElementById('ldr-sensor').textContent = latestData.ldrSensor;
-            updateChart(data);
+            document.getElementById('plant-name').textContent = data.plantName || 'Domates';
+            document.getElementById('soil-moisture').textContent = data.soilMoisture || '---';
+            document.getElementById('current-temperature').textContent = data.temperature || '---';
+            document.getElementById('current-humidity').textContent = data.humidity || '---';
+            document.getElementById('ldr-sensor').textContent = data.ldr || '---';
+            updateChart(data.history);
         })
-        .catch(error => console.error('Veri alınırken hata oluştu:', error));
+        .catch(error => console.error('Sensor verileri alınamadı:', error));
 }
 
-function updateChart(data) {
-    const labels = Object.keys(data).map(key => new Date(data[key].time).toLocaleString());
-    const temperatures = Object.keys(data).map(key => data[key].temperature);
-    const humidities = Object.keys(data).map(key => data[key].humidity);
-    const soilMoistures = Object.keys(data).map(key => data[key].soilMoisture);
-    const ldrSensors = Object.keys(data).map(key => data[key].ldrSensor);
-
+function updateChart(historyData) {
     const ctx = document.getElementById('sensor-chart').getContext('2d');
-    new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'Sıcaklık (°C)',
-                    data: temperatures,
-                    borderColor: 'red',
-                    fill: false
-                },
-                {
-                    label: 'Nem (%)',
-                    data: humidities,
-                    borderColor: 'blue',
-                    fill: false
-                },
-                {
-                    label: 'Toprak Nem (%)',
-                    data: soilMoistures,
-                    borderColor: 'green',
-                    fill: false
-                },
-                {
-                    label: 'Işık Şiddeti',
-                    data: ldrSensors,
-                    borderColor: 'orange',
-                    fill: false
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            scales: {
-                x: {
-                    type: 'time',
-                    time: {
-                        unit: 'hour'
-                    }
-                }
+    const labels = historyData.map(entry => entry.timestamp);
+    const soilMoistureData = historyData.map(entry => entry.soilMoisture);
+    const temperatureData = historyData.map(entry => entry.temperature);
+    const humidityData = historyData.map(entry => entry.humidity);
+    const lightData = historyData.map(entry => entry.ldr);
+
+    const data = {
+        labels: labels,
+        datasets: [
+            {
+                label: 'Toprak Nemi',
+                data: soilMoistureData,
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'Sıcaklık',
+                data: temperatureData,
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'Nem',
+                data: humidityData,
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            },
+            {
+                label: 'Işık Şiddeti',
+                data: lightData,
+                borderColor: 'rgba(255, 206, 86, 1)',
+                borderWidth: 1
+            }
+        ]
+    };
+
+    const options = {
+        scales: {
+            y: {
+                beginAtZero: true
             }
         }
+    };
+
+    new Chart(ctx, {
+        type: 'line',
+        data: data,
+        options: options
     });
 }
 
 function toggleContactForm() {
-    var formSection = document.getElementById('contact');
-    if (document.getElementById('show-contact-form').checked) {
-        formSection.style.display = 'block';
-    } else {
-        formSection.style.display = 'none';
-    }
+    const contactForm = document.getElementById("contact");
+    contactForm.style.display = contactForm.style.display === "none" ? "block" : "none";
 }
 
 function submitForm(event) {
     event.preventDefault();
-    const name = document.getElementById('name').value;
-    const email = document.getElementById('email').value;
-    const subject = document.getElementById('subject').value;
-    const message = document.getElementById('message').value;
+    const form = event.target;
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData.entries());
 
-    console.log(`Ad: ${name}\nE-posta: ${email}\nKonu: ${subject}\nMesaj: ${message}`);
-
-    alert("Form başarıyla gönderildi!");
-    document.getElementById('contact-form').reset();
+    fetch('https://bitki-izleme-default-rtdb.firebaseio.com/contact.json', {
+        method: 'POST',
+        body: JSON.stringify(data),
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(response => {
+        if (response.ok) {
+            alert('Mesajınız gönderildi!');
+            form.reset();
+        } else {
+            alert('Mesajınız gönderilemedi, lütfen tekrar deneyin.');
+        }
+    })
+    .catch(error => alert('Mesajınız gönderilemedi, lütfen tekrar deneyin.'));
 }
