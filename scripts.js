@@ -101,6 +101,7 @@ function loadHomePage() {
 
         <div class="controls">
             <button onclick="updateSensorData()">Verileri Güncelle</button>
+            <!-- Diğer kontroller burada yer alabilir -->
         </div>
 
         <div class="chart-container">
@@ -109,7 +110,6 @@ function loadHomePage() {
     `;
     updateSensorData(); // Sayfa yüklendiğinde verileri güncelle
 }
-
 function loadPlantsPage() {
     document.getElementById("main-content").innerHTML = `
         <h2>Bitkiler ve Bakım Bilgileri</h2>
@@ -143,6 +143,7 @@ function loadPlantsPage() {
         </ul>
     `;
 }
+
 
 function loadAboutPage() {
     document.getElementById("main-content").innerHTML = `
@@ -184,159 +185,130 @@ function loadContactPage() {
         </section>
     `;
 }
-
 function loadDataHistory() {
     fetch('https://bitki-izleme-default-rtdb.firebaseio.com/sensors.json')
         .then(response => response.json())
         .then(data => {
-            const container = document.createElement('div');
-            container.className = 'container';
-            
-            const table = document.createElement('table');
-            table.className = 'sensor-history-table';
-            
-            const thead = document.createElement('thead');
-            const tr = document.createElement('tr');
-            const headers = ['Zaman', 'Toprak Nemi', 'Sıcaklık', 'Nem', 'Işık Şiddeti'];
-            
-            headers.forEach(headerText => {
-                const th = document.createElement('th');
-                th.textContent = headerText;
-                tr.appendChild(th);
+            let tableHTML = `
+                <h2>Veri Geçmişi</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Zaman</th>
+                            <th>Sıcaklık (°C)</th>
+                            <th>Nem (%)</th>
+                            <th>Toprak Nem Sensörü (%)</th>
+                            <th>Işık Şiddeti</th>
+                        </tr>
+                    </thead>
+                    <tbody>`;
+            Object.keys(data).forEach(key => {
+                const sensor = data[key];
+                const time = new Date(sensor.time).toLocaleString();
+                const temperature = sensor.temperature;
+                const humidity = sensor.humidity;
+                const soilMoisture = sensor.soilMoisture || '---'; // Toprak nem sensörü değeri
+                const ldrSensor = sensor.ldrSensor || '---'; // Işık sensörü değeri
+                tableHTML += `
+                    <tr>
+                        <td>${time}</td>
+                        <td>${temperature}</td>
+                        <td>${humidity}</td>
+                        <td>${soilMoisture}</td>
+                        <td>${ldrSensor}</td>
+                    </tr>
+                `;
             });
-            
-            thead.appendChild(tr);
-            table.appendChild(thead);
-            
-            const tbody = document.createElement('tbody');
-            
-            for (const key in data) {
-                if (data.hasOwnProperty(key)) {
-                    const entry = data[key];
-                    const tr = document.createElement('tr');
-                    
-                    const tdTime = document.createElement('td');
-                    tdTime.textContent = entry.timestamp;
-                    tr.appendChild(tdTime);
-                    
-                    const tdSoilMoisture = document.createElement('td');
-                    tdSoilMoisture.textContent = entry.soilMoisture;
-                    tr.appendChild(tdSoilMoisture);
-                    
-                    const tdTemperature = document.createElement('td');
-                    tdTemperature.textContent = entry.temperature;
-                    tr.appendChild(tdTemperature);
-                    
-                    const tdHumidity = document.createElement('td');
-                    tdHumidity.textContent = entry.humidity;
-                    tr.appendChild(tdHumidity);
-                    
-                    const tdLight = document.createElement('td');
-                    tdLight.textContent = entry.ldr;
-                    tr.appendChild(tdLight);
-                    
-                    tbody.appendChild(tr);
-                }
-            }
-            
-            table.appendChild(tbody);
-            container.appendChild(table);
-            document.getElementById('main-content').innerHTML = '';
-            document.getElementById('main-content').appendChild(container);
+            tableHTML += `</tbody></table>`;
+            document.getElementById("main-content").innerHTML = tableHTML;
         })
-        .catch(error => console.error('Veri geçmişi alınamadı:', error));
+        .catch(error => console.error('Veri alınamadı:', error));
 }
 
 function updateSensorData() {
-    fetch('https://bitki-izleme-default-rtdb.firebaseio.com/sensors/latest.json')
+    fetch('https://bitki-izleme-default-rtdb.firebaseio.com/sensors.json')
         .then(response => response.json())
         .then(data => {
-            document.getElementById('plant-name').textContent = data.plantName || 'Domates';
-            document.getElementById('soil-moisture').textContent = data.soilMoisture || '---';
-            document.getElementById('current-temperature').textContent = data.temperature || '---';
-            document.getElementById('current-humidity').textContent = data.humidity || '---';
-            document.getElementById('ldr-sensor').textContent = data.ldr || '---';
-            updateChart(data.history);
+            const latestReading = data[Object.keys(data).pop()];
+            document.getElementById('current-temperature').textContent = latestReading.temperature;
+            document.getElementById('current-humidity').textContent = latestReading.humidity;
+            document.getElementById('soil-moisture').textContent = latestReading.soilMoisture || '---'; // Toprak nem sensörü değeri
+            document.getElementById('ldr-sensor').textContent = latestReading.ldrSensor || '---'; // Işık sensörü değeri
+
+            // Grafik verilerini güncelle
+            updateChart(latestReading.temperature, latestReading.soilMoisture, latestReading.ldrSensor);
         })
-        .catch(error => console.error('Sensor verileri alınamadı:', error));
+        .catch(error => console.error('Veri alınamadı:', error));
 }
 
-function updateChart(historyData) {
-    const ctx = document.getElementById('sensor-chart').getContext('2d');
-    const labels = historyData.map(entry => entry.timestamp);
-    const soilMoistureData = historyData.map(entry => entry.soilMoisture);
-    const temperatureData = historyData.map(entry => entry.temperature);
-    const humidityData = historyData.map(entry => entry.humidity);
-    const lightData = historyData.map(entry => entry.ldr);
-
-    const data = {
-        labels: labels,
-        datasets: [
-            {
-                label: 'Toprak Nemi',
-                data: soilMoistureData,
-                borderColor: 'rgba(75, 192, 192, 1)',
+function updateChart(temperature, soilMoisture, ldrSensor) {
+    var ctx = document.getElementById('sensor-chart').getContext('2d');
+    var myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Sıcaklık', 'Toprak Nem', 'Işık Şiddeti'],
+            datasets: [{
+                label: 'Değerler',
+                data: [temperature, soilMoisture, ldrSensor],
+                backgroundColor: [
+                    'rgba(255, 99, 132, 0.2)',
+                    'rgba(54, 162, 235, 0.2)',
+                    'rgba(255, 206, 86, 0.2)'
+                ],
+                borderColor: [
+                    'rgba(255, 99, 132, 1)',
+                    'rgba(54, 162, 235, 1)',
+                    'rgba(255, 206, 86, 1)'
+                ],
                 borderWidth: 1
-            },
-            {
-                label: 'Sıcaklık',
-                data: temperatureData,
-                borderColor: 'rgba(255, 99, 132, 1)',
-                borderWidth: 1
-            },
-            {
-                label: 'Nem',
-                data: humidityData,
-                borderColor: 'rgba(54, 162, 235, 1)',
-                borderWidth: 1
-            },
-            {
-                label: 'Işık Şiddeti',
-                data: lightData,
-                borderColor: 'rgba(255, 206, 86, 1)',
-                borderWidth: 1
-            }
-        ]
-    };
-
-    const options = {
-        scales: {
-            y: {
-                beginAtZero: true
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
             }
         }
-    };
-
-    new Chart(ctx, {
-        type: 'line',
-        data: data,
-        options: options
     });
-}
-
-function toggleContactForm() {
-    const contactForm = document.getElementById("contact");
-    contactForm.style.display = contactForm.style.display === "none" ? "block" : "none";
 }
 
 function submitForm(event) {
     event.preventDefault();
-    const form = event.target;
+    const form = document.getElementById('contact-form');
     const formData = new FormData(form);
-    const data = Object.fromEntries(formData.entries());
+    const formDataObject = {};
+    formData.forEach((value, key) => {
+        formDataObject[key] = value;
+    });
 
-    fetch('https://bitki-izleme-default-rtdb.firebaseio.com/contact.json', {
+    // Firebase veritabanına veriyi gönder
+    fetch('https://iletisim-902bb-default-rtdb.europe-west1.firebasedatabase.app/contact.json', {
         method: 'POST',
-        body: JSON.stringify(data),
-        headers: { 'Content-Type': 'application/json' }
+        body: JSON.stringify(formDataObject),
+        headers: {
+            'Content-Type': 'application/json'
+        }
     })
     .then(response => {
         if (response.ok) {
-            alert('Mesajınız gönderildi!');
-            form.reset();
+            console.log('Form başarıyla Firebase veritabanına gönderildi.');
         } else {
-            alert('Mesajınız gönderilemedi, lütfen tekrar deneyin.');
+            console.error('Form gönderilirken bir hata oluştu.');
         }
     })
-    .catch(error => alert('Mesajınız gönderilemedi, lütfen tekrar deneyin.'));
+    .catch(error => {
+        console.error('Form gönderilirken bir hata oluştu:', error);
+    });
+
+    // Form alanlarını temizle
+    form.reset();
 }
+
+function toggleContactForm() {
+    const contactForm = document.getElementById('contact');
+    contactForm.classList.toggle('active');
+}
+
+// Sayfa yüklendiğinde Ana Sayfa'yı göster
+loadPage('home');
